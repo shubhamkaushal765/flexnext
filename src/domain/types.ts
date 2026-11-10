@@ -5,7 +5,7 @@ export type Profile = {
   maxHr?: number;    // bpm, user-measured
   legDays: number[]; // gym leg days, 0=Sun..6=Sat (Date.getDay())
 };
-export type Target = { kind: 'pct'; pct: number } | { kind: 'watts'; watts: number } | { kind: 'free' };
+export type Target = { kind: 'pct'; pct: number } | { kind: 'watts'; watts: number };
 export type Segment = { label: string; durationSec: number; target: Target };
 export type ModeId = 'ftp-ramp' | 'easy' | 'endurance' | 'free' | 'sweet-spot' | 'vo2';
 export type Mode = {
