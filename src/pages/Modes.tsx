@@ -28,8 +28,8 @@ function RampResult() {
   const [best, setBest] = useState('');
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
-  const watts = Number(best);
-  const ftp = best.trim() !== '' && watts > 0 ? ftpFromRamp(watts) : undefined;
+  const watts = /^\d+$/.test(best.trim()) ? Number(best.trim()) : NaN;
+  const ftp = watts > 0 ? ftpFromRamp(watts) : undefined;
 
   if (!active) return <p className="label">Select a profile to save the result.</p>;
 

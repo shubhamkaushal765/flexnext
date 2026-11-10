@@ -63,6 +63,7 @@ describe('profile store', () => {
   it('setActiveId(null) removes the key', async () => {
     const kv = memKV();
     const s = createProfileStore(kv);
+    await s.save(prof('1'));
     await s.setActiveId('1');
     expect(kv.map.get('activeProfileId')).toBe('1');
     await s.setActiveId(null);
@@ -131,5 +132,45 @@ describe('validateProfile', () => {
 
   it('checks leg days', () => {
     for (const legDays of [[7], [-1], [1.5]]) expect(validateProfile({ ...ok, legDays })).toContain(LEG);
+  });
+
+  describe('load normalisation', () => {
+    const load = async (stored: unknown) => {
+      const kv = memKV({ profiles: JSON.stringify(stored) });
+      const l = await createProfileStore(kv).list();
+      return { l, kv };
+    };
+
+    it('drops ftp 0 and writes a backup', async () => {
+      const { l, kv } = await load([{ id: 'a', name: 'A', legDays: [], ftp: 0 }]);
+      expect(l[0].ftp).toBeUndefined();
+      expect(kv.map.has('profiles.bak')).toBe(true);
+    });
+
+    it('drops string ftp and writes a backup', async () => {
+      const { l, kv } = await load([{ id: 'a', name: 'A', legDays: [], ftp: '250' }]);
+      expect(l[0].ftp).toBeUndefined();
+      expect(kv.map.has('profiles.bak')).toBe(true);
+    });
+
+    it('filters leg days and writes a backup', async () => {
+      const { l, kv } = await load([{ id: 'a', name: 'A', legDays: [9, 0.5, 2] }]);
+      expect(l[0].legDays).toEqual([2]);
+      expect(kv.map.has('profiles.bak')).toBe(true);
+    });
+
+    it('writes no backup for clean data', async () => {
+      const { l, kv } = await load([{ id: 'a', name: 'A', legDays: [1, 3], ftp: 250, maxHr: 190 }]);
+      expect(l[0].ftp).toBe(250);
+      expect(kv.map.has('profiles.bak')).toBe(false);
+    });
+  });
+
+  it('setActiveId for a concurrently removed profile leaves no active id', async () => {
+    const s = createProfileStore(memKV());
+    await s.save(prof('a'));
+    await s.setActiveId('a');
+    await Promise.all([s.remove('a'), s.setActiveId('a')]);
+    expect(await s.getActiveId()).toBeNull();
   });
 });

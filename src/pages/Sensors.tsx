@@ -32,7 +32,7 @@ export default function Sensors() {
   });
   const handles = useRef<Partial<Record<SensorKind, Handle>>>({});
   const mounted = useRef(false);
-  const lastSeen = useRef<Partial<Record<SensorKind, number>>>({});
+  const lastSeen = useRef<Partial<Record<SensorKind, Partial<Record<keyof Reading, number>>>>>({});
 
   const patch = useCallback((kind: SensorKind, p: Partial<Card>) => {
     setCards((c) => ({ ...c, [kind]: { ...c[kind], ...p } }));
@@ -43,11 +43,16 @@ export default function Sensors() {
     const id = setInterval(() => {
       const now = Date.now();
       for (const kind of KINDS) {
-        const t = lastSeen.current[kind];
-        if (t !== undefined && now - t > STALE_MS) {
-          delete lastSeen.current[kind];
-          patch(kind, { values: {} });
-        }
+        const seen = lastSeen.current[kind];
+        if (!seen) continue;
+        const stale = (Object.keys(seen) as (keyof Reading)[]).filter((k) => now - (seen[k] ?? 0) > STALE_MS);
+        if (stale.length === 0) continue;
+        for (const k of stale) delete seen[k];
+        setCards((c) => {
+          const values = { ...c[kind].values };
+          for (const k of stale) delete values[k];
+          return { ...c, [kind]: { ...c[kind], values } };
+        });
       }
     }, 1000);
     return () => clearInterval(id);
@@ -88,7 +93,9 @@ export default function Sensors() {
       const h = await connectSensor(
         kind,
         (r) => {
-          lastSeen.current[kind] = Date.now();
+          const now = Date.now();
+          const seen = (lastSeen.current[kind] ??= {});
+          for (const k of Object.keys(r) as (keyof Reading)[]) if (r[k] !== undefined) seen[k] = now;
           setCards((c) => ({ ...c, [kind]: { ...c[kind], values: { ...c[kind].values, ...r } } }));
         },
         () => release(kind),
@@ -98,7 +105,6 @@ export default function Sensors() {
         return;
       }
       handles.current[kind] = h;
-      lastSeen.current[kind] = Date.now();
       patch(kind, { status: 'connected', name: h.name });
     } catch (e) {
       patch(kind, { status: 'idle', error: e instanceof Error ? e.message : String(e) });

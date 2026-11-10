@@ -12,7 +12,9 @@ type Form = { id: string | null; name: string; ftp: string; maxHr: string; legDa
 const emptyForm: Form = { id: null, name: '', ftp: '', maxHr: '', legDays: [] };
 
 function toNumber(s: string): number | undefined {
-  return s.trim() === '' ? undefined : Number(s);
+  const t = s.trim();
+  if (t === '') return undefined;
+  return /^\d+$/.test(t) ? Number(t) : NaN;
 }
 
 export default function Profiles() {

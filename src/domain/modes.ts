@@ -93,7 +93,8 @@ export function suggestedMode(profile: Profile, today: Date): ModeId {
   const t = today.getDay();
   const y = (t + 6) % 7;
   if (profile.legDays.includes(t) || profile.legDays.includes(y)) return 'easy';
-  return profile.ftp === undefined ? 'easy' : 'endurance';
+  const known = typeof profile.ftp === 'number' && Number.isFinite(profile.ftp) && profile.ftp > 0;
+  return known ? 'endurance' : 'easy';
 }
 
 export function totalDurationSec(mode: Mode): number {

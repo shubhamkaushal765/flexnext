@@ -121,6 +121,11 @@ describe('suggestedMode', () => {
     expect(suggestedMode(p({ ftp: 250 }), day(10))).toBe('endurance');
   });
 
+  it('treats a non-positive or non-finite ftp as unknown', () => {
+    expect(suggestedMode(p({ ftp: 0 }), day(10))).toBe('easy');
+    expect(suggestedMode(p({ ftp: NaN }), day(10))).toBe('easy');
+  });
+
   it('suggests easy on a leg day', () => {
     const today = day(10);
     expect(suggestedMode(p({ ftp: 250, legDays: [today.getDay()] }), today)).toBe('easy');
