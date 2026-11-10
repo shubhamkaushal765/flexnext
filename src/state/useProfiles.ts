@@ -1,11 +1,13 @@
 import { createContext, useContext } from 'react';
+import type { ProfileDraft } from '../data/profiles';
 import type { Profile } from '../domain/types';
 
 export type ProfileState = {
   loaded: boolean;
   profiles: Profile[];
   active: Profile | null;
-  save: (p: Profile) => Promise<void>;
+  error: string | null;
+  save: (p: ProfileDraft) => Promise<void>;
   remove: (id: string) => Promise<void>;
   setActive: (id: string | null) => Promise<void>;
 };

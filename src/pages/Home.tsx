@@ -1,16 +1,17 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { MODES, SAFETY_TEXT, suggestedMode } from '../domain/modes';
+import Skeleton from '../components/Skeleton';
 import { useProfiles } from '../state/useProfiles';
 
 export default function Home() {
-  const { loaded, profiles, active } = useProfiles();
+  const { loaded, profiles, active, error } = useProfiles();
   const [today] = useState(() => new Date());
 
   if (!loaded) {
     return (
       <>
-        <p>Loading...</p>
+        <Skeleton lines={2} />
         <p className="safety">{SAFETY_TEXT}</p>
       </>
     );
@@ -21,6 +22,7 @@ export default function Home() {
   return (
     <>
       <h1>FlexNext</h1>
+      {error && <p className="error" role="alert">{error}</p>}
       {profiles.length === 0 ? (
         <p>
           <Link to="/profiles">Create a profile</Link> to get started.

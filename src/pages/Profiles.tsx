@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { validateProfile } from '../data/profiles';
-import type { ProfileInput } from '../data/profiles';
+import type { ProfileDraft, ProfileInput } from '../data/profiles';
 import type { Profile } from '../domain/types';
+import Skeleton from '../components/Skeleton';
+import { toUserMessage } from '../lib/errors';
 import { useProfiles } from '../state/useProfiles';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -18,10 +20,11 @@ function toNumber(s: string): number | undefined {
 }
 
 export default function Profiles() {
-  const { profiles, active, save, remove, setActive } = useProfiles();
+  const { loaded, profiles, active, error, save, remove, setActive } = useProfiles();
   const [form, setForm] = useState<Form | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   function edit(p: Profile) {
     setErrors([]);
@@ -57,22 +60,51 @@ export default function Profiles() {
     if (errs.length > 0) return;
     const id = form.id ?? crypto.randomUUID();
     setSaving(true);
+    setActionError(null);
     try {
-      await save({ id, ...input });
+      const draft: ProfileDraft = { id, ...input };
+      await save(draft);
       if (!active) await setActive(id);
       setForm(null);
+    } catch (err) {
+      setActionError(toUserMessage(err));
     } finally {
       setSaving(false);
     }
   }
 
   async function del(p: Profile) {
-    if (window.confirm('Deletes this profile and its data from this phone.')) await remove(p.id);
+    if (!window.confirm('Deletes this profile and its data from this phone.')) return;
+    setActionError(null);
+    try {
+      await remove(p.id);
+    } catch (err) {
+      setActionError(toUserMessage(err));
+    }
+  }
+
+  async function use(id: string) {
+    setActionError(null);
+    try {
+      await setActive(id);
+    } catch (err) {
+      setActionError(toUserMessage(err));
+    }
+  }
+
+  if (!loaded) {
+    return (
+      <>
+        <h1>Profiles</h1>
+        <Skeleton />
+      </>
+    );
   }
 
   return (
     <>
       <h1>Profiles</h1>
+      {(error ?? actionError) && <p className="error" role="alert">{actionError ?? error}</p>}
       <ul className="list">
         {profiles.map((p) => (
           <li key={p.id} className="card">
@@ -84,7 +116,7 @@ export default function Profiles() {
               FTP {p.ftp ?? '-'} W · Max HR {p.maxHr ?? '-'} bpm
             </p>
             <div className="row">
-              {active?.id !== p.id && <button onClick={() => setActive(p.id)}>Use</button>}
+              {active?.id !== p.id && <button onClick={() => use(p.id)}>Use</button>}
               <button onClick={() => edit(p)}>Edit</button>
               <button className="danger" onClick={() => del(p)}>Delete</button>
             </div>
