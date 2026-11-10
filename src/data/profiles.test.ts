@@ -85,6 +85,19 @@ describe('profile store', () => {
     expect(l).toEqual([{ id: 'a', name: 'A', legDays: [] }]);
   });
 
+  it('backs up raw data when normalisation drops items', async () => {
+    const raw = JSON.stringify([{ id: 'a', name: 'A' }, { name: 'no id' }]);
+    const kv = memKV({ profiles: raw });
+    await createProfileStore(kv).list();
+    expect(kv.map.get('profiles.bak')).toBe(raw);
+  });
+
+  it('does not back up when nothing is dropped', async () => {
+    const kv = memKV({ profiles: JSON.stringify([{ id: 'a', name: 'A' }]) });
+    await createProfileStore(kv).list();
+    expect(kv.map.has('profiles.bak')).toBe(false);
+  });
+
   it('does not lose concurrent saves', async () => {
     const s = createProfileStore(memKV());
     await Promise.all([s.save(prof('1')), s.save(prof('2'))]);

@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { validateProfile } from '../data/profiles';
 import type { ProfileInput } from '../data/profiles';
 import type { Profile } from '../domain/types';
-import { useProfiles } from '../state/ProfileContext';
+import { useProfiles } from '../state/useProfiles';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -19,6 +19,7 @@ export default function Profiles() {
   const { profiles, active, save, remove, setActive } = useProfiles();
   const [form, setForm] = useState<Form | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
 
   function edit(p: Profile) {
     setErrors([]);
@@ -35,14 +36,14 @@ export default function Profiles() {
     setForm((f) =>
       f && {
         ...f,
-        legDays: f.legDays.includes(d) ? f.legDays.filter((x) => x !== d) : [...f.legDays, d].sort(),
+        legDays: f.legDays.includes(d) ? f.legDays.filter((x) => x !== d) : [...f.legDays, d].sort((a, b) => a - b),
       },
     );
   }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!form) return;
+    if (!form || saving) return;
     const input: ProfileInput = {
       name: form.name.trim(),
       ftp: toNumber(form.ftp),
@@ -53,9 +54,14 @@ export default function Profiles() {
     setErrors(errs);
     if (errs.length > 0) return;
     const id = form.id ?? crypto.randomUUID();
-    await save({ id, ...input });
-    if (!active) await setActive(id);
-    setForm(null);
+    setSaving(true);
+    try {
+      await save({ id, ...input });
+      if (!active) await setActive(id);
+      setForm(null);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function del(p: Profile) {
@@ -127,7 +133,7 @@ export default function Profiles() {
             <p key={m} className="error">{m}</p>
           ))}
           <div className="row">
-            <button type="submit">Save</button>
+            <button type="submit" disabled={saving}>Save</button>
             <button type="button" onClick={() => setForm(null)}>Cancel</button>
           </div>
         </form>

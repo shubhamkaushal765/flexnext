@@ -70,7 +70,9 @@ export function createProfileStore(kv: KV): {
     try {
       const data: unknown = JSON.parse(raw);
       if (!Array.isArray(data)) throw new Error('not an array');
-      return data.map(normalise).filter((p): p is Profile => p !== null);
+      const out = data.map(normalise).filter((p): p is Profile => p !== null);
+      if (out.length < data.length) await kv.set(BACKUP, raw);
+      return out;
     } catch {
       await kv.set(BACKUP, raw);
       return [];
@@ -96,6 +98,6 @@ export function createProfileStore(kv: KV): {
         if ((await kv.get(ACTIVE)) === id) await kv.remove(ACTIVE);
       }),
     getActiveId: () => kv.get(ACTIVE),
-    setActiveId: (id) => (id === null ? kv.remove(ACTIVE) : kv.set(ACTIVE, id)),
+    setActiveId: (id) => queue(() => (id === null ? kv.remove(ACTIVE) : kv.set(ACTIVE, id))),
   };
 }

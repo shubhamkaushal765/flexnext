@@ -44,10 +44,15 @@ export async function connectSensor(
   await BleClient.initialize({ androidNeverForLocation: true });
   const device = await BleClient.requestDevice({ services: [serviceUuid] });
   await BleClient.connect(device.deviceId, () => onDisconnect());
-  await BleClient.startNotifications(device.deviceId, serviceUuid, characteristicUuid, (value) => {
-    const reading = parse(value);
-    if (Object.keys(reading).length > 0) onReading(reading);
-  });
+  try {
+    await BleClient.startNotifications(device.deviceId, serviceUuid, characteristicUuid, (value) => {
+      const reading = parse(value);
+      if (Object.keys(reading).length > 0) onReading(reading);
+    });
+  } catch (e) {
+    await BleClient.disconnect(device.deviceId).catch(() => {});
+    throw e;
+  }
 
   return {
     name: device.name ?? label,

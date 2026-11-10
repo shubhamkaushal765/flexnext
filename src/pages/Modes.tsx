@@ -10,7 +10,7 @@ import {
   totalDurationSec,
 } from '../domain/modes';
 import type { Mode, Segment } from '../domain/types';
-import { useProfiles } from '../state/ProfileContext';
+import { useProfiles } from '../state/useProfiles';
 
 function minutes(sec: number): string {
   return String(Number((sec / 60).toFixed(1)));
@@ -27,6 +27,7 @@ function RampResult() {
   const { active, save } = useProfiles();
   const [best, setBest] = useState('');
   const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
   const watts = Number(best);
   const ftp = best.trim() !== '' && watts > 0 ? ftpFromRamp(watts) : undefined;
 
@@ -37,14 +38,22 @@ function RampResult() {
     const { id, ...rest } = active;
     const errs = validateProfile({ ...rest, ftp });
     setError(errs[0] ?? '');
-    if (errs.length === 0) await save({ id, ...rest, ftp });
+    setSaved(false);
+    if (errs.length === 0) {
+      await save({ id, ...rest, ftp });
+      setSaved(true);
+    }
   }
 
   return (
     <div>
       <label>
         Best 1-minute power (W)
-        <input inputMode="numeric" value={best} onChange={(e) => setBest(e.target.value)} />
+        <input inputMode="numeric" value={best} onChange={(e) => {
+            setBest(e.target.value);
+            setError('');
+            setSaved(false);
+          }} />
       </label>
       {ftp !== undefined && (
         <p>
@@ -52,6 +61,7 @@ function RampResult() {
         </p>
       )}
       {error && <p className="error">{error}</p>}
+      {saved && <p className="label">Saved</p>}
       <button disabled={ftp === undefined} onClick={saveFtp}>Save as FTP</button>
     </div>
   );

@@ -1,13 +1,20 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { MODES, SAFETY_TEXT, suggestedMode } from '../domain/modes';
-import { useProfiles } from '../state/ProfileContext';
+import { useProfiles } from '../state/useProfiles';
 
 export default function Home() {
   const { loaded, profiles, active } = useProfiles();
   const [today] = useState(() => new Date());
 
-  if (!loaded) return <p>Loading...</p>;
+  if (!loaded) {
+    return (
+      <>
+        <p>Loading...</p>
+        <p className="safety">{SAFETY_TEXT}</p>
+      </>
+    );
+  }
 
   const suggestion = active ? MODES.find((m) => m.id === suggestedMode(active, today)) : undefined;
 

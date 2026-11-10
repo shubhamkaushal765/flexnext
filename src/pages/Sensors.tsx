@@ -31,6 +31,7 @@ export default function Sensors() {
     trainer: initial,
   });
   const handles = useRef<Partial<Record<SensorKind, Handle>>>({});
+  const mounted = useRef(false);
   const lastSeen = useRef<Partial<Record<SensorKind, number>>>({});
 
   const patch = useCallback((kind: SensorKind, p: Partial<Card>) => {
@@ -64,11 +65,22 @@ export default function Sensors() {
 
   // Release sensors when leaving the page.
   useEffect(() => {
+    mounted.current = true;
     const current = handles.current;
     return () => {
+      mounted.current = false;
       for (const kind of KINDS) current[kind]?.disconnect().catch(() => undefined);
     };
   }, []);
+
+  const release = useCallback(
+    (kind: SensorKind) => {
+      delete handles.current[kind];
+      delete lastSeen.current[kind];
+      patch(kind, { status: 'disconnected', values: {} });
+    },
+    [patch],
+  );
 
   async function connect(kind: SensorKind) {
     patch(kind, { status: 'connecting', error: '', values: {} });
@@ -79,12 +91,12 @@ export default function Sensors() {
           lastSeen.current[kind] = Date.now();
           setCards((c) => ({ ...c, [kind]: { ...c[kind], values: { ...c[kind].values, ...r } } }));
         },
-        () => {
-          delete handles.current[kind];
-          delete lastSeen.current[kind];
-          patch(kind, { status: 'disconnected', values: {} });
-        },
+        () => release(kind),
       );
+      if (!mounted.current) {
+        h.disconnect().catch(() => {});
+        return;
+      }
       handles.current[kind] = h;
       lastSeen.current[kind] = Date.now();
       patch(kind, { status: 'connected', name: h.name });
@@ -98,10 +110,9 @@ export default function Sensors() {
       await handles.current[kind]?.disconnect();
     } catch (e) {
       patch(kind, { error: e instanceof Error ? e.message : String(e) });
+      return;
     }
-    delete handles.current[kind];
-    delete lastSeen.current[kind];
-    patch(kind, { status: 'disconnected', values: {} });
+    release(kind);
   }
 
   const unsupported = !('bluetooth' in navigator) && !Capacitor.isNativePlatform();
