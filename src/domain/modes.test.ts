@@ -10,6 +10,7 @@ import {
   totalDurationSec,
 } from './modes';
 import type { Mode, ModeId, Profile } from './types';
+import { EPOCH } from '../data/profiles';
 
 const byId = (id: ModeId): Mode => {
   return (
@@ -111,7 +112,7 @@ describe('maths', () => {
 });
 
 describe('suggestedMode', () => {
-  const p = (over: Partial<Profile>): Profile => ({ id: 'a', name: 'A', legDays: [], ...over });
+  const p = (over: Partial<Profile>): Profile => ({ id: 'a', name: 'A', legDays: [], createdAt: EPOCH, updatedAt: EPOCH, ...over });
 
   it('suggests easy with no ftp and no leg days', () => {
     expect(suggestedMode(p({}), day(10))).toBe('easy');
@@ -154,7 +155,7 @@ describe('suggestedMode', () => {
       const today = day(d);
       for (const ftp of [undefined, 250]) {
         for (const legDays of [[], [3], [today.getDay()]]) {
-          const id = suggestedMode({ id: 'a', name: 'A', ftp, legDays }, today);
+          const id = suggestedMode({ id: 'a', name: 'A', ftp, legDays, createdAt: EPOCH, updatedAt: EPOCH }, today);
           expect(MODES.map((m) => m.id)).toContain(id);
           expect(byId(id).optIn).toBe(false);
         }

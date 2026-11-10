@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createProfileStore, validateProfile, type KV, type ProfileInput } from './profiles';
-import type { Profile } from '../domain/types';
+import { createProfileStore, validateProfile, EPOCH, type KV, type ProfileInput, type ProfileDraft } from './profiles';
 
 function memKV(initial: Record<string, string> = {}): KV & { map: Map<string, string> } {
   const map = new Map(Object.entries(initial));
@@ -17,7 +16,15 @@ function memKV(initial: Record<string, string> = {}): KV & { map: Map<string, st
   };
 }
 
-const prof = (id: string, over: Partial<Profile> = {}): Profile => ({ id, name: 'P' + id, legDays: [], ...over });
+const prof = (id: string, over: Partial<ProfileDraft> = {}): ProfileDraft => ({ id, name: 'P' + id, legDays: [], ...over });
+
+const clock = (...isos: string[]) => {
+  let i = 0;
+  return () => new Date(isos[Math.min(i++, isos.length - 1)]);
+};
+
+const T1 = '2024-01-01T00:00:00.000Z';
+const T2 = '2024-02-02T00:00:00.000Z';
 
 describe('profile store', () => {
   it('lists empty', async () => {
@@ -83,7 +90,7 @@ describe('profile store', () => {
       profiles: JSON.stringify([{ id: 'a', name: 'A' }, { name: 'no id' }, { id: 'b' }, { id: 3, name: 'num' }]),
     });
     const l = await createProfileStore(kv).list();
-    expect(l).toEqual([{ id: 'a', name: 'A', legDays: [] }]);
+    expect(l).toEqual([{ id: 'a', name: 'A', legDays: [], createdAt: EPOCH, updatedAt: EPOCH }]);
   });
 
   it('backs up raw data when normalisation drops items', async () => {
@@ -103,6 +110,115 @@ describe('profile store', () => {
     const s = createProfileStore(memKV());
     await Promise.all([s.save(prof('1')), s.save(prof('2'))]);
     expect((await s.list()).map((p) => p.id).sort()).toEqual(['1', '2']);
+  });
+});
+
+describe('storage envelope and versions', () => {
+  const stored = (kv: { map: Map<string, string> }) => JSON.parse(kv.map.get('profiles') as string);
+
+  it('P1 save writes versioned envelope', async () => {
+    const kv = memKV();
+    await createProfileStore(kv).save(prof('1'));
+    const d = stored(kv);
+    expect(d.version).toBe(1);
+    expect(d.profiles).toHaveLength(1);
+  });
+
+  it('P2 legacy array reads with EPOCH timestamps and no backup', async () => {
+    const kv = memKV({ profiles: JSON.stringify([{ id: 'a', name: 'A', legDays: [] }]) });
+    const l = await createProfileStore(kv).list();
+    expect(l[0].createdAt).toBe(EPOCH);
+    expect(l[0].updatedAt).toBe(EPOCH);
+    expect(kv.map.has('profiles.bak')).toBe(false);
+  });
+
+  it('P3 save after legacy migrates to version 1', async () => {
+    const kv = memKV({ profiles: JSON.stringify([{ id: 'a', name: 'A', legDays: [] }]) });
+    const s = createProfileStore(kv, clock(T1));
+    await s.save(prof('b'));
+    const d = stored(kv);
+    expect(d.version).toBe(1);
+    expect(d.profiles.map((p: { id: string }) => p.id)).toEqual(['a', 'b']);
+    expect(d.profiles[0].createdAt).toBe(EPOCH);
+  });
+
+  it('P4 newer version rejects and leaves data alone', async () => {
+    const raw = JSON.stringify({ version: 2, profiles: [] });
+    const kv = memKV({ profiles: raw });
+    const s = createProfileStore(kv);
+    await expect(s.list()).rejects.toMatchObject({ code: 'version' });
+    await expect(s.save(prof('1'))).rejects.toMatchObject({ code: 'version' });
+    expect(kv.map.get('profiles')).toBe(raw);
+    expect(kv.map.has('profiles.bak')).toBe(false);
+  });
+
+  it('P5 bad envelope backs up and returns []', async () => {
+    const raw = JSON.stringify({ version: 1, profiles: 'x' });
+    const kv = memKV({ profiles: raw });
+    expect(await createProfileStore(kv).list()).toEqual([]);
+    expect(kv.map.get('profiles.bak')).toBe(raw);
+  });
+});
+
+describe('timestamps', () => {
+  const stored = (kv: { map: Map<string, string> }) => JSON.parse(kv.map.get('profiles') as string);
+
+  it('P6 save stamps from clock', async () => {
+    const kv = memKV();
+    await createProfileStore(kv, clock(T1)).save(prof('1'));
+    const p = stored(kv).profiles[0];
+    expect(p.createdAt).toBe(T1);
+    expect(p.updatedAt).toBe(T1);
+  });
+
+  it('P7 second save keeps createdAt, bumps updatedAt', async () => {
+    const kv = memKV();
+    const s = createProfileStore(kv, clock(T1, T2));
+    await s.save(prof('1'));
+    await s.save(prof('1', { name: 'New' }));
+    const p = stored(kv).profiles[0];
+    expect(p.createdAt).toBe(T1);
+    expect(p.updatedAt).toBe(T2);
+  });
+
+  it('P8 ignores caller timestamps and extra fields', async () => {
+    const kv = memKV();
+    const draft = { ...prof('1'), createdAt: '2000-01-01T00:00:00.000Z', junk: 1 } as unknown as ProfileDraft;
+    await createProfileStore(kv, clock(T1)).save(draft);
+    const p = stored(kv).profiles[0];
+    expect(p.createdAt).toBe(T1);
+    expect('junk' in p).toBe(false);
+  });
+
+  it('P9 invalid stored createdAt becomes EPOCH with backup', async () => {
+    const kv = memKV({
+      profiles: JSON.stringify({ version: 1, profiles: [{ id: 'a', name: 'A', legDays: [], createdAt: 'nope', updatedAt: T1 }] }),
+    });
+    const l = await createProfileStore(kv).list();
+    expect(l[0].createdAt).toBe(EPOCH);
+    expect(kv.map.has('profiles.bak')).toBe(true);
+  });
+});
+
+describe('load hardening', () => {
+  it('P10 duplicate ids keep first with backup', async () => {
+    const kv = memKV({
+      profiles: JSON.stringify([
+        { id: 'a', name: 'first', legDays: [] },
+        { id: 'a', name: 'second', legDays: [] },
+      ]),
+    });
+    const l = await createProfileStore(kv).list();
+    expect(l).toHaveLength(1);
+    expect(l[0].name).toBe('first');
+    expect(kv.map.has('profiles.bak')).toBe(true);
+  });
+
+  it('P11 long name sliced to 60 with backup', async () => {
+    const kv = memKV({ profiles: JSON.stringify([{ id: 'a', name: 'x'.repeat(61), legDays: [] }]) });
+    const l = await createProfileStore(kv).list();
+    expect(l[0].name).toBe('x'.repeat(60));
+    expect(kv.map.has('profiles.bak')).toBe(true);
   });
 });
 
@@ -128,6 +244,11 @@ describe('validateProfile', () => {
   it('checks max hr', () => {
     for (const maxHr of [99, 231, 180.5]) expect(validateProfile({ ...ok, maxHr })).toContain(HR);
     for (const maxHr of [100, 230, undefined]) expect(validateProfile({ ...ok, maxHr })).toEqual([]);
+  });
+
+  it('P12 limits name length', () => {
+    expect(validateProfile({ ...ok, name: 'x'.repeat(61) })).toContain('Name must be at most 60 characters');
+    expect(validateProfile({ ...ok, name: 'x'.repeat(60) })).not.toContain('Name must be at most 60 characters');
   });
 
   it('checks leg days', () => {
@@ -172,5 +293,14 @@ describe('validateProfile', () => {
     await s.setActiveId('a');
     await Promise.all([s.remove('a'), s.setActiveId('a')]);
     expect(await s.getActiveId()).toBeNull();
+  });
+
+  it('save trims name so a valid name survives list unchanged', async () => {
+    const kv = memKV();
+    const s = createProfileStore(kv);
+    const name = 'a'.repeat(60);
+    await s.save({ id: 'x', name: ' ' + name, legDays: [] });
+    expect((await s.list())[0].name).toBe(name);
+    expect(kv.map.has('profiles.bak')).toBe(false);
   });
 });

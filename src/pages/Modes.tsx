@@ -9,7 +9,9 @@ import {
   targetWatts,
   totalDurationSec,
 } from '../domain/modes';
+import Skeleton from '../components/Skeleton';
 import type { Mode, Segment } from '../domain/types';
+import { toUserMessage } from '../lib/errors';
 import { useProfiles } from '../state/useProfiles';
 
 function minutes(sec: number): string {
@@ -40,8 +42,12 @@ function RampResult() {
     setError(errs[0] ?? '');
     setSaved(false);
     if (errs.length === 0) {
-      await save({ id, ...rest, ftp });
-      setSaved(true);
+      try {
+        await save({ id, ...rest, ftp });
+        setSaved(true);
+      } catch (e) {
+        setError(toUserMessage(e));
+      }
     }
   }
 
@@ -60,7 +66,7 @@ function RampResult() {
           FTP: <strong>{ftp} W</strong>
         </p>
       )}
-      {error && <p className="error">{error}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
       {saved && <p className="label">Saved</p>}
       <button disabled={ftp === undefined} onClick={saveFtp}>Save as FTP</button>
     </div>
@@ -105,8 +111,18 @@ function ModeCard({ mode, unlocked }: { mode: Mode; unlocked: boolean }) {
 }
 
 export default function Modes() {
+  const { loaded } = useProfiles();
   const [ticked, setTicked] = useState<boolean[]>(() => READINESS_ITEMS.map(() => false));
   const unlocked = ticked.every(Boolean);
+
+  if (!loaded) {
+    return (
+      <>
+        <h1>Modes</h1>
+        <Skeleton />
+      </>
+    );
+  }
 
   return (
     <>

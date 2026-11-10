@@ -4,6 +4,8 @@ export type Profile = {
   ftp?: number;      // watts
   maxHr?: number;    // bpm, user-measured
   legDays: number[]; // gym leg days, 0=Sun..6=Sat (Date.getDay())
+  createdAt: string; // ISO 8601
+  updatedAt: string; // ISO 8601
 };
 export type Target = { kind: 'pct'; pct: number } | { kind: 'watts'; watts: number };
 export type Segment = { label: string; durationSec: number; target: Target };
