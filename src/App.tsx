@@ -5,6 +5,7 @@ import Home from './pages/Home';
 import Profiles from './pages/Profiles';
 import Modes from './pages/Modes';
 import Sensors from './pages/Sensors';
+import { NotFound, RouteError } from './components/RouteError';
 
 function Layout() {
   return (
@@ -25,11 +26,13 @@ function Layout() {
 const router = createHashRouter([
   {
     element: <Layout />,
+    errorElement: <RouteError />,
     children: [
       { path: '/', element: <Home /> },
       { path: '/profiles', element: <Profiles /> },
       { path: '/modes', element: <Modes /> },
       { path: '/sensors', element: <Sensors /> },
+      { path: '*', element: <NotFound /> },
     ],
   },
 ]);
